@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function, division, absolute_import, unicode_literals
 import sys
 
 try:
@@ -10,15 +11,15 @@ install_requires = ['requests >= 1.2.0']
 if sys.version_info < (3, 2):
     install_requires.insert(0, 'futures >= 2.1.3')
 
-setup(name='tinys3',
-      version='0.1.12',
-      description=("A small library for uploading files to S3,"
+setup(name='minis3',
+      version='1.0.0',
+      description=("A enhanced fork of tinys3 - A small library for uploading files to S3-compatible storage,"
                    "With support of async uploads, worker pools, cache headers etc"),
 
-      author='Shlomi Atar',
-      author_email='shlomi@smore.com',
-      url='https://www.smore.com/labs/tinys3/',
-      packages=['tinys3'],
+      author='Pattapong Jantarach',
+      author_email='me@pattapongj.com',
+      url='https://github.com/TheGU/minis3/',
+      packages=['minis3'],
       license='MIT', 
 
       classifiers=[
@@ -29,10 +30,10 @@ setup(name='tinys3',
       ],
 
       platforms='Any',
-      keywords=('amazon', 'aws', 's3', 'upload'),
+      keywords=('amazon', 'aws', 's3', 's3-client', 'upload', 'minio', 's3-compatible'),
 
       package_dir={'': '.'},
       install_requires=install_requires,
       tests_require=['nose', 'flexmock'],
-      test_suite='tinys3.tests'
+      test_suite='minis3.tests'
 )
