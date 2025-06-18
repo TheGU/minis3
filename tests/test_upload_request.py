@@ -1,15 +1,25 @@
-from datetime import timedelta
+import sys
 import unittest
-from flexmock import flexmock
-from tinys3 import Connection
-from tinys3.request_factory import UploadRequest
+from datetime import timedelta
 
+from flexmock import flexmock
+
+from minis3 import Connection
+from minis3.request_factory import UploadRequest
 
 # Support for python 2/3
 try:
     from StringIO import StringIO
 except ImportError:
     from io import StringIO
+
+# Expected headers for the upload request
+# On Windows/local: application/x-zip-compressed
+# On Linux/act: application/zip
+if sys.platform.startswith("win"):
+    EXPECTED_ZIP_CONTENT_TYPE = "application/x-zip-compressed"
+else:
+    EXPECTED_ZIP_CONTENT_TYPE = "application/zip"
 
 
 class TestUploadRequest(unittest.TestCase):
@@ -19,37 +29,35 @@ class TestUploadRequest(unittest.TestCase):
         """
         self.conn = Connection("TEST_ACCESS_KEY", "TEST_SECRET_KEY", tls=True)
 
-        self.dummy_data = StringIO('DUMMY_DATA')
+        self.dummy_data = StringIO("DUMMY_DATA")
 
     def _mock_adapter(self, request):
         """
         Creates a mock object and replace the result of the adapter method with is
         """
         mock_obj = flexmock()
-        flexmock(request).should_receive('adapter').and_return(mock_obj)
+        flexmock(request).should_receive("adapter").and_return(mock_obj)
 
         return mock_obj
 
     def test_simple_upload(self):
         """
-        Test the simplest case of upload
+        Test the simplest case of upload (private by default)
         """
 
-        r = UploadRequest(self.conn, 'upload_key', self.dummy_data, 'bucket')
+        r = UploadRequest(self.conn, "upload_key", self.dummy_data, "bucket")
 
         mock = self._mock_adapter(r)
 
-        expected_headers = {
-            'x-amz-acl': 'public-read',
-            'Content-Type': 'application/octet-stream'
-        }
+        expected_headers = {"Content-Type": "application/octet-stream"}
 
-        mock.should_receive('put').with_args(
-            'https://bucket.s3.amazonaws.com/upload_key',
+        mock.should_receive("put").with_args(
+            "https://bucket.s3.amazonaws.com/upload_key",
             # 'https://s3.amazonaws.com/bucket/upload_key',
             headers=expected_headers,
             data=self.dummy_data,
-            auth=self.conn.auth
+            auth=self.conn.auth,
+            verify=True,
         ).and_return(self._mock_response()).once()
 
         r.run()
@@ -70,41 +78,43 @@ class TestUploadRequest(unittest.TestCase):
         # it was tested on the 'test_simple_upload' test
 
         # Test auto content type guessing
-        r = UploadRequest(self.conn, 'test_zip_key.zip', self.dummy_data, 'bucket')
+        r = UploadRequest(self.conn, "test_zip_key.zip", self.dummy_data, "bucket")
 
         mock = self._mock_adapter(r)
 
-        expected_headers = {
-            'x-amz-acl': 'public-read',
-            'Content-Type': 'application/zip'
-        }
+        expected_headers = {"Content-Type": EXPECTED_ZIP_CONTENT_TYPE}
 
-        mock.should_receive('put').with_args(
+        mock.should_receive("put").with_args(
             #  'https://s3.amazonaws.com/bucket/test_zip_key.zip',
-            'https://bucket.s3.amazonaws.com/test_zip_key.zip',
+            "https://bucket.s3.amazonaws.com/test_zip_key.zip",
             headers=expected_headers,
             data=self.dummy_data,
-            auth=self.conn.auth
+            auth=self.conn.auth,
+            verify=True,
         ).and_return(self._mock_response()).once()
 
         r.run()
 
         # Test explicit content setting
-        r = UploadRequest(self.conn, 'test_zip_key.zip', self.dummy_data, 'bucket', content_type='candy/smore')
+        r = UploadRequest(
+            self.conn,
+            "test_zip_key.zip",
+            self.dummy_data,
+            "bucket",
+            content_type="candy/smore",
+        )
 
         mock = self._mock_adapter(r)
 
-        expected_headers = {
-            'x-amz-acl': 'public-read',
-            'Content-Type': 'candy/smore'
-        }
+        expected_headers = {"Content-Type": "candy/smore"}
 
-        mock.should_receive('put').with_args(
+        mock.should_receive("put").with_args(
             # 'https://s3.amazonaws.com/bucket/test_zip_key.zip',
-            'https://bucket.s3.amazonaws.com/test_zip_key.zip',
+            "https://bucket.s3.amazonaws.com/test_zip_key.zip",
             headers=expected_headers,
             data=self.dummy_data,
-            auth=self.conn.auth
+            auth=self.conn.auth,
+            verify=True,
         ).and_return(self._mock_response()).once()
 
         r.run()
@@ -116,65 +126,75 @@ class TestUploadRequest(unittest.TestCase):
 
         # Test max expiry headers
 
-        r = UploadRequest(self.conn, 'test_zip_key.zip', self.dummy_data, 'bucket', expires='max')
+        r = UploadRequest(
+            self.conn, "test_zip_key.zip", self.dummy_data, "bucket", expires="max"
+        )
 
         mock = self._mock_adapter(r)
 
         expected_headers = {
-            'x-amz-acl': 'public-read',
-            'Content-Type': 'application/zip',
-            'Cache-Control': 'max-age=31536000, public'
+            "Content-Type": EXPECTED_ZIP_CONTENT_TYPE,
+            "Cache-Control": "max-age=31536000, private",
         }
 
-        mock.should_receive('put').with_args(
-            'https://bucket.s3.amazonaws.com/test_zip_key.zip',
+        mock.should_receive("put").with_args(
+            "https://bucket.s3.amazonaws.com/test_zip_key.zip",
             # 'https://s3.amazonaws.com/bucket/test_zip_key.zip',
             headers=expected_headers,
             data=self.dummy_data,
-            auth=self.conn.auth
+            auth=self.conn.auth,
+            verify=True,
         ).and_return(self._mock_response()).once()
 
         r.run()
 
         # Test number expiry
-        r = UploadRequest(self.conn, 'test_zip_key.zip', self.dummy_data, 'bucket', expires=1337)
+        r = UploadRequest(
+            self.conn, "test_zip_key.zip", self.dummy_data, "bucket", expires=1337
+        )
 
         mock = self._mock_adapter(r)
 
         expected_headers = {
-            'x-amz-acl': 'public-read',
-            'Content-Type': 'application/zip',
-            'Cache-Control': 'max-age=1337, public'
+            "Content-Type": EXPECTED_ZIP_CONTENT_TYPE,
+            "Cache-Control": "max-age=1337, private",
         }
 
-        mock.should_receive('put').with_args(
+        mock.should_receive("put").with_args(
             # 'https://s3.amazonaws.com/bucket/test_zip_key.zip',
-            'https://bucket.s3.amazonaws.com/test_zip_key.zip',
+            "https://bucket.s3.amazonaws.com/test_zip_key.zip",
             headers=expected_headers,
             data=self.dummy_data,
-            auth=self.conn.auth
+            auth=self.conn.auth,
+            verify=True,
         ).and_return(self._mock_response()).once()
 
         r.run()
 
         # Test timedelta expiry
 
-        r = UploadRequest(self.conn, 'test_zip_key.zip', self.dummy_data, 'bucket', expires=timedelta(weeks=2))
+        r = UploadRequest(
+            self.conn,
+            "test_zip_key.zip",
+            self.dummy_data,
+            "bucket",
+            expires=timedelta(weeks=2),
+        )
 
         mock = self._mock_adapter(r)
 
         expected_headers = {
-            'x-amz-acl': 'public-read',
-            'Content-Type': 'application/zip',
-            'Cache-Control': 'max-age=1209600, public'
+            "Content-Type": EXPECTED_ZIP_CONTENT_TYPE,
+            "Cache-Control": "max-age=1209600, private",
         }
 
-        mock.should_receive('put').with_args(
+        mock.should_receive("put").with_args(
             # 'https://s3.amazonaws.com/bucket/test_zip_key.zip',
-            'https://bucket.s3.amazonaws.com/test_zip_key.zip',
+            "https://bucket.s3.amazonaws.com/test_zip_key.zip",
             headers=expected_headers,
             data=self.dummy_data,
-            auth=self.conn.auth
+            auth=self.conn.auth,
+            verify=True,
         ).and_return(self._mock_response()).once()
 
         r.run()
@@ -184,23 +204,28 @@ class TestUploadRequest(unittest.TestCase):
         Test providing extra headers to the upload request
         """
 
-        r = UploadRequest(self.conn, 'test_zip_key.zip', self.dummy_data, 'bucket',
-                          extra_headers={'example-meta-key': 'example-meta-value'})
+        r = UploadRequest(
+            self.conn,
+            "test_zip_key.zip",
+            self.dummy_data,
+            "bucket",
+            extra_headers={"example-meta-key": "example-meta-value"},
+        )
 
         mock = self._mock_adapter(r)
 
         expected_headers = {
-            'x-amz-acl': 'public-read',
-            'Content-Type': 'application/zip',
-            'example-meta-key': 'example-meta-value'
+            "Content-Type": EXPECTED_ZIP_CONTENT_TYPE,
+            "example-meta-key": "example-meta-value",
         }
 
-        mock.should_receive('put').with_args(
+        mock.should_receive("put").with_args(
             # 'https://s3.amazonaws.com/bucket/test_zip_key.zip',
-            'https://bucket.s3.amazonaws.com/test_zip_key.zip',
+            "https://bucket.s3.amazonaws.com/test_zip_key.zip",
             headers=expected_headers,
             data=self.dummy_data,
-            auth=self.conn.auth
+            auth=self.conn.auth,
+            verify=True,
         ).and_return(self._mock_response()).once()
 
         r.run()
@@ -210,22 +235,23 @@ class TestUploadRequest(unittest.TestCase):
         Test auto closing of the stream automatically
         """
 
-        r = UploadRequest(self.conn, 'test_zip_key.zip', self.dummy_data, 'bucket',
-                          close=True)
+        r = UploadRequest(
+            self.conn, "test_zip_key.zip", self.dummy_data, "bucket", close=True
+        )
 
         mock = self._mock_adapter(r)
 
         expected_headers = {
-            'x-amz-acl': 'public-read',
-            'Content-Type': 'application/zip',
+            "Content-Type": EXPECTED_ZIP_CONTENT_TYPE,
         }
 
-        mock.should_receive('put').with_args(
+        mock.should_receive("put").with_args(
             # 'https://s3.amazonaws.com/bucket/test_zip_key.zip',
-            'https://bucket.s3.amazonaws.com/test_zip_key.zip',
+            "https://bucket.s3.amazonaws.com/test_zip_key.zip",
             headers=expected_headers,
             data=self.dummy_data,
-            auth=self.conn.auth
+            auth=self.conn.auth,
+            verify=True,
         ).and_return(self._mock_response()).once()
 
         r.run()
@@ -240,22 +266,23 @@ class TestUploadRequest(unittest.TestCase):
         # seek the data
         self.dummy_data.seek(5)
 
-        r = UploadRequest(self.conn, 'test_zip_key.zip', self.dummy_data, 'bucket',
-                          rewind=True)
+        r = UploadRequest(
+            self.conn, "test_zip_key.zip", self.dummy_data, "bucket", rewind=True
+        )
 
         mock = self._mock_adapter(r)
 
         expected_headers = {
-            'x-amz-acl': 'public-read',
-            'Content-Type': 'application/zip',
+            "Content-Type": EXPECTED_ZIP_CONTENT_TYPE,
         }
 
-        mock.should_receive('put').with_args(
+        mock.should_receive("put").with_args(
             # 'https://s3.amazonaws.com/bucket/test_zip_key.zip',
-            'https://bucket.s3.amazonaws.com/test_zip_key.zip',
+            "https://bucket.s3.amazonaws.com/test_zip_key.zip",
             headers=expected_headers,
             data=self.dummy_data,
-            auth=self.conn.auth
+            auth=self.conn.auth,
+            verify=True,
         ).and_return(self._mock_response()).once()
 
         r.run()

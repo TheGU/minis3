@@ -1,0 +1,8 @@
+# Test dependencies for minis3
+pytest>=4.6.0
+pytest-mock>=2.0.0
+requests-mock>=1.8.0
+flexmock>=0.10.0
+# Additional dependencies that might be needed
+six>=1.10.0  # Python 2/3 compatibility
+mock>=2.0.0  # For older Python versions

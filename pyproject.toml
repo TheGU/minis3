@@ -1,7 +1,38 @@
 [project]
-name = "tinys3"
-version = "0.1.0"
-description = "Add your description here"
+name = "minis3"
+version = "1.0.0"
+description = "A enhanced fork of tinys3 - A small library for uploading files to S3-compatible storage, with support of async uploads, worker pools, cache headers etc"
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = []
+requires-python = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
+dependencies = ["requests"]
+authors = [
+    {name = "Pattapong Jantarach", email = "me@pattapongj.com"}
+]
+license = {text = "MIT"}
+keywords = ["amazon", "aws", "s3", "s3-client", "upload", "minio", "s3-compatible"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 2.7",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+[project.urls]
+Homepage = "https://github.com/TheGU/minis3"
+Repository = "https://github.com/TheGU/minis3.git"
+Issues = "https://github.com/TheGU/minis3/issues"
+
+[build-system]
+requires = ["setuptools>=44", "wheel"]
+build-backend = "setuptools.build_meta"

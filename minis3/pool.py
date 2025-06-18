@@ -1,13 +1,21 @@
-# -*- coding: utf-8 -*
-from .connection import Base
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from concurrent.futures import wait
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
+
+from .connection import Base
 
 
 class Pool(Base):
-    def __init__(self, access_key, secret_key, default_bucket=None, tls=False,
-                 endpoint="s3.amazonaws.com", size=5):
+    def __init__(
+        self,
+        access_key,
+        secret_key,
+        default_bucket=None,
+        tls=False,
+        endpoint="s3.amazonaws.com",
+        size=5,
+    ):
         """
         Create a new pool.
 
@@ -31,9 +39,13 @@ class Pool(Base):
         """
 
         # Call to the base constructor
-        super(Pool, self).__init__(access_key, secret_key, tls=tls,
-                                   default_bucket=default_bucket,
-                                   endpoint=endpoint)
+        super(Pool, self).__init__(
+            access_key,
+            secret_key,
+            tls=tls,
+            default_bucket=default_bucket,
+            endpoint=endpoint,
+        )
 
         # Setup the executor
         self.executor = ThreadPoolExecutor(max_workers=size)

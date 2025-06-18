@@ -1,0 +1,126 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install -r requirements-test.txt
+    
+    - name: Run unit tests
+      run: |
+        pytest tests/ -m "not live" -v
+
+  unit-tests-27:
+    name: Unit Tests (Python 2.7)
+    runs-on: ubuntu-latest
+    container: coatldev/six:latest
+    strategy:
+      matrix:
+        python-version: ['2.7']
+    
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        python2 --version
+        python2 -m pip install --upgrade pip
+        python2 -m pip install -e .
+        python2 -m pip install tox
+        python2 -m pip install -r requirements-test.txt
+    
+    - name: Run unit tests
+      run: |
+        python2 -m pytest tests/ -m "not live" -v
+
+  integration-tests:
+    name: Live Integration Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install -r requirements-test.txt
+    
+    - name: Start MinIO service
+      run: |
+        docker compose up -d
+        
+    - name: Wait for MinIO to be ready
+      run: |
+        timeout 60 bash -c 'until curl -f http://localhost:9000/minio/health/live; do echo "Waiting for MinIO..."; sleep 2; done'
+    
+    - name: Run integration tests
+      env:
+        MINIO_ENDPOINT: localhost:9000
+        MINIO_ACCESS_KEY: minioadmin
+        MINIO_SECRET_KEY: minioadmin
+      run: |
+        pytest tests/ -m live -v
+    
+    - name: Cleanup services
+      if: always()
+      run: |
+        docker compose down -v
+
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort
+    
+    - name: Run flake8
+      run: |
+        flake8 minis3/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 minis3/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    # - name: Check import sorting
+    #   run: |
+    #     isort --check-only --diff minis3/
+    
+    - name: Check code formatting  
+      run: |
+        black --check --diff minis3/

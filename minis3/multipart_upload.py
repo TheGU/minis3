@@ -1,5 +1,7 @@
-from .request_factory import (UploadPartRequest,
-                              InitiateMultipartUploadRequest)
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+from .request_factory import InitiateMultipartUploadRequest, UploadPartRequest
 
 
 class MultipartUpload:
@@ -14,10 +16,10 @@ class MultipartUpload:
         self.conn = conn
         self.bucket = self.conn.bucket(bucket)
         if type(key) is not str:
-            self.key = key.encode('utf-8')
+            self.key = key.encode("utf-8")
         else:
             self.key = key
-        self.uploadId = ''
+        self.uploadId = ""
 
     def initiate(self):
         """A kind of advanced method to send the initiate
@@ -27,8 +29,9 @@ class MultipartUpload:
         self.uploadId = self.conn.run(req)
         return self.uploadId
 
-    def upload_part_from_file(self, fp, part_num, length=None, md5=None,
-                              close=False, rewind=True):
+    def upload_part_from_file(
+        self, fp, part_num, length=None, md5=None, close=False, rewind=True
+    ):
         """
         Uploads a part from a file object.
 
@@ -45,13 +48,21 @@ class MultipartUpload:
         """
         extra_headers = {}
         if length is not None:
-            extra_headers['Content-Length'] = length
+            extra_headers["Content-Length"] = length
         if md5 is not None:
-            extra_headers['Content-MD5'] = md5
+            extra_headers["Content-MD5"] = md5
         # PUT /ObjectName?partNumber=PartNumber&uploadId=UploadId
-        req = UploadPartRequest(self.conn, self.key, self.bucket, fp,
-                                part_num, self.uploadId, close, rewind,
-                                extra_headers)
+        req = UploadPartRequest(
+            self.conn,
+            self.key,
+            self.bucket,
+            fp,
+            part_num,
+            self.uploadId,
+            close,
+            rewind,
+            extra_headers,
+        )
         rep = self.conn.run(req)
         return rep
 
@@ -62,12 +73,13 @@ class MultipartUpload:
         See http://docs.aws.amazon.com/AmazonS3/latest/API/
         mpUploadComplete.html"""
         from .request_factory import CompleteUploadRequest
+
         req = CompleteUploadRequest(
             self.conn,
             self.key,
             self.bucket,
             self.uploadId,
-            list(self.list_parts())  # Convert the generator to list
+            list(self.list_parts()),  # Convert the generator to list
         )
         resp = self.conn.run(req)
         return resp
@@ -75,15 +87,11 @@ class MultipartUpload:
     def cancel_upload(self):
         """Call this method to abort the multipart upload"""
         from .request_factory import CancelUploadRequest
-        req = CancelUploadRequest(
-            self.conn,
-            self.key,
-            self.bucket,
-            self.uploadId
-        )
+
+        req = CancelUploadRequest(self.conn, self.key, self.bucket, self.uploadId)
         return self.conn.run(req)
 
-    def list_parts(self, encoding=None, max_parts=1000, part_number_marker=''):
+    def list_parts(self, encoding=None, max_parts=1000, part_number_marker=""):
         """Generator to obtain all uploaded parts of this multipart upload.
         The following extra params can be used:
         - encoding: use 'url' to encode the response.
@@ -93,8 +101,16 @@ class MultipartUpload:
                               begin. Only parts with higher part numbers will
                               be listed. (String)"""
         from .request_factory import ListPartsRequest
-        r = ListPartsRequest(self.conn, self.key, self.bucket, self.uploadId,
-                             max_parts, encoding, part_number_marker)
+
+        r = ListPartsRequest(
+            self.conn,
+            self.key,
+            self.bucket,
+            self.uploadId,
+            max_parts,
+            encoding,
+            part_number_marker,
+        )
         return self.conn.run(r)
 
     def number_of_parts(self):

@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 
-import threading
 import unittest
-from flexmock import flexmock
-from nose.tools import raises
-import time
-from tinys3.auth import S3Auth
-from tinys3.pool import Pool
-from .test_conn import TEST_SECRET_KEY, TEST_ACCESS_KEY
-from concurrent.futures import ThreadPoolExecutor, Future
-import concurrent.futures
+from concurrent.futures import Future, ThreadPoolExecutor
 
-DUMMY_OBJECT = 'DUMMY'
+from flexmock import flexmock
+
+from minis3.auth import S3Auth
+from minis3.pool import Pool
+
+from .test_conn import TEST_ACCESS_KEY, TEST_SECRET_KEY
+
+DUMMY_OBJECT = "DUMMY"
 
 
 class TestPool(unittest.TestCase):
@@ -21,17 +20,16 @@ class TestPool(unittest.TestCase):
         """
 
         # Test new pool with auth
-        pool = Pool(TEST_ACCESS_KEY, TEST_SECRET_KEY, default_bucket='bucket', tls=True)
+        pool = Pool(TEST_ACCESS_KEY, TEST_SECRET_KEY, default_bucket="bucket", tls=True)
 
-        self.assertEquals(pool.tls, True)
-        self.assertEquals(pool.default_bucket, 'bucket')
+        self.assertEqual(pool.tls, True)
+        self.assertEqual(pool.default_bucket, "bucket")
         self.assertTrue(isinstance(pool.auth, S3Auth))
         self.assertTrue(isinstance(pool.executor, ThreadPoolExecutor))
 
         # Test new pool with different size
         pool = Pool(TEST_ACCESS_KEY, TEST_SECRET_KEY, size=25)
-        self.assertEquals(pool.executor._max_workers, 25)
-
+        self.assertEqual(pool.executor._max_workers, 25)
 
     def test_as_completed(self):
         """
@@ -50,7 +48,7 @@ class TestPool(unittest.TestCase):
 
         # Make sure all the results are dummy objects
         for i in pool.as_completed(futures):
-            self.assertEquals(i, DUMMY_OBJECT)
+            self.assertEqual(i, DUMMY_OBJECT)
 
     def test_all_completed(self):
         """
@@ -68,7 +66,7 @@ class TestPool(unittest.TestCase):
 
         # Make sure all the results are dummy objects
         for i in pool.all_completed(futures):
-            self.assertEquals(i, DUMMY_OBJECT)
+            self.assertEqual(i, DUMMY_OBJECT)
 
     def test_pool_as_context_manager(self):
         """
@@ -77,7 +75,7 @@ class TestPool(unittest.TestCase):
 
         pool = Pool(TEST_ACCESS_KEY, TEST_SECRET_KEY)
 
-        flexmock(pool).should_receive('close').once()
+        flexmock(pool).should_receive("close").once()
 
         with pool as p:
             # do nothing

@@ -1,22 +1,37 @@
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 from .auth import S3Auth
-from .request_factory import (UploadRequest, UpdateMetadataRequest,
-                              CopyRequest, DeleteRequest, GetRequest,
-                              ListRequest, ListMultipartUploadRequest,
-                              HeadRequest)
+from .operations.bucket_requests import CreateBucketRequest, DeleteBucketRequest
+from .request_factory import (
+    CopyRequest,
+    DeleteRequest,
+    GetRequest,
+    HeadRequest,
+    ListMultipartUploadRequest,
+    ListRequest,
+    UpdateMetadataRequest,
+    UploadRequest,
+)
 
 
 class Base(object):
     """
     The "Base" connection object, Handles the common S3 tasks
-    (upload, copy, delete,etc)
-
-    This is an "abstract" class, both Connection and Pool implement it.
+    (upload, copy, delete,etc)    This is an "abstract" class, both Connection and Pool implement it.
     """
 
-    def __init__(self, access_key, secret_key, default_bucket=None, tls=False,
-                 endpoint="s3.amazonaws.com"):
+    def __init__(
+        self,
+        access_key,
+        secret_key,
+        default_bucket=None,
+        tls=True,
+        endpoint="s3.amazonaws.com",
+        verify=True,
+        signature_version="s3v4",
+        path_style=False,
+    ):
         """
         Creates a new S3 connection
 
@@ -27,14 +42,26 @@ class Base(object):
               inside this pool won't have to specify
                                 the bucket every time.
             - tls               (Optional) Make the requests using secure
-              connection (Defaults to False)
+              connection (Defaults to True)
             - endpoint          (Optional) Sets the s3 endpoint.
-
-        """
+            - verify            (Optional) Control SSL/TLS certificate validation.
+              Defaults to True. Set to False for self-signed certificates.
+            - signature_version (Optional) AWS signature version to use.
+              Defaults to 's3v4' (Signature Version 4). Use 's3' for legacy v2.
+            - path_style        (Optional) Use path-style URLs instead of virtual
+              host-style. Defaults to False (virtual host-style).
+              Set to True for MinIO and other S3-compatible services."""
         self.default_bucket = default_bucket
-        self.auth = S3Auth(access_key, secret_key)
+        self.path_style = path_style
+        self.auth = S3Auth(
+            access_key,
+            secret_key,
+            signature_version=signature_version,
+            endpoint=endpoint,
+        )
         self.tls = tls
         self.endpoint = endpoint
+        self.verify = verify
 
     def bucket(self, bucket):
         """
@@ -52,12 +79,14 @@ class Base(object):
             defined.
         """
         if bucket and type(bucket) is not str:
-            bucket = bucket.encode('utf-8')
+            bucket = bucket.encode("utf-8")
         b = bucket or self.default_bucket
         # If we don't have a bucket, raise an exception
         if not b:
-            raise ValueError("You must specify a bucket in your request or set"
-                             "the default_bucket for the connection")
+            raise ValueError(
+                "You must specify a bucket in your request or set"
+                "the default_bucket for the connection"
+            )
         return b
 
     def get(self, key, bucket=None, headers=None):
@@ -83,14 +112,14 @@ class Base(object):
         r = GetRequest(self, key, self.bucket(bucket), headers=headers)
         return self.run(r)
 
-    def list(self, prefix='', bucket=None):
+    def list(self, prefix="", bucket=None):
         """
         List files
 
         Params:
-            - prefix        (Optional) List only files starting with this prefix (default to the empty string)
+            - prefix  (Optional) List only files starting with this prefix (default to the empty string)
 
-            - bucket        (Optional) The name of the bucket to use (can be skipped if setting the default_bucket option) for the connection
+            - bucket  (Optional) The name of the bucket to use (can be skipped if setting the default_bucket option)
 
         Returns:
             - An iterator over the files, each file being represented by a dict object with the following keys:
@@ -110,9 +139,18 @@ class Base(object):
 
         return self.run(r)
 
-    def upload(self, key, local_file,
-               bucket=None, expires=None, content_type=None,
-               public=True, headers=None, rewind=True, close=False):
+    def upload(
+        self,
+        key,
+        local_file,
+        bucket=None,
+        expires=None,
+        content_type=None,
+        public=False,
+        headers=None,
+        rewind=True,
+        close=False,
+    ):
         """
         Upload a file and store it under a key
 
@@ -164,14 +202,23 @@ class Base(object):
         There are more usage examples in the readme file.
 
         """
-        r = UploadRequest(self, key, local_file, self.bucket(bucket),
-                          expires=expires, content_type=content_type,
-                          public=public, extra_headers=headers, rewind=rewind,
-                          close=close)
+        r = UploadRequest(
+            self,
+            key,
+            local_file,
+            self.bucket(bucket),
+            expires=expires,
+            content_type=content_type,
+            public=public,
+            extra_headers=headers,
+            rewind=rewind,
+            close=close,
+        )
         return self.run(r)
 
-    def copy(self, from_key, from_bucket, to_key, to_bucket=None,
-             metadata=None, public=True):
+    def copy(
+        self, from_key, from_bucket, to_key, to_bucket=None, metadata=None, public=False
+    ):
         """
         Copy a key contents to another key/bucket with an option to update
         metadata/public state
@@ -200,11 +247,18 @@ class Base(object):
         There are more usage examples in the readme file.
         """
         to_bucket = self.bucket(to_bucket or from_bucket)
-        r = CopyRequest(self, from_key, from_bucket, to_key, to_bucket,
-                        metadata=metadata, public=public)
+        r = CopyRequest(
+            self,
+            from_key,
+            from_bucket,
+            to_key,
+            to_bucket,
+            metadata=metadata,
+            public=public,
+        )
         return self.run(r)
 
-    def update_metadata(self, key, metadata=None, bucket=None, public=True):
+    def update_metadata(self, key, metadata=None, bucket=None, public=False):
         """
         Updates the metadata information for a file
 
@@ -224,8 +278,7 @@ class Base(object):
 
         There are more usage examples in the readme file.
         """
-        r = UpdateMetadataRequest(self, key, self.bucket(bucket), metadata,
-                                  public)
+        r = UpdateMetadataRequest(self, key, self.bucket(bucket), metadata, public)
 
         return self.run(r)
 
@@ -265,13 +318,53 @@ class Base(object):
         r = HeadRequest(self, self.bucket(bucket))
         return self.run(r)
 
+    def create_bucket(self, bucket):
+        """
+        Create a new bucket
+
+        Params:
+            - bucket        The name of the bucket to create
+
+        Returns:
+            - A response object from the requests lib or a future that wraps
+              that response object if used with a pool.
+
+        Usage:
+            >>> conn.create_bucket('my-new-bucket')
+        """
+        r = CreateBucketRequest(self, self.bucket(bucket))
+        return self.run(r)
+
+    def delete_bucket(self, bucket):
+        """
+        Delete a bucket
+
+        Params:
+            - bucket        The name of the bucket to delete
+
+        Returns:
+            - A response object from the requests lib or a future that wraps
+              that response object if used with a pool.
+
+        Usage:
+            >>> conn.delete_bucket('my-old-bucket')
+        """
+        r = DeleteBucketRequest(self, self.bucket(bucket))
+        return self.run(r)
+
     def head_object(self, key, bucket=None, headers=None):
         r = HeadRequest(self, self.bucket(bucket), key)
         return self.run(r)
 
-    def list_multipart_uploads(self, prefix='', bucket=None, encoding=None,
-                               max_uploads=1000, key_marker='',
-                               upload_id_marker=''):
+    def list_multipart_uploads(
+        self,
+        prefix="",
+        bucket=None,
+        encoding=None,
+        max_uploads=1000,
+        key_marker="",
+        upload_id_marker="",
+    ):
         """
         List a bucket's ongoing multipart uploads
 
@@ -313,13 +406,19 @@ class Base(object):
         >>> conn.list_multipart_uploads('rep/','sample_bucket')
 
         """
-        r = ListMultipartUploadRequest(self, prefix, self.bucket(bucket),
-                                       max_uploads, encoding, key_marker,
-                                       upload_id_marker)
+        r = ListMultipartUploadRequest(
+            self,
+            prefix,
+            self.bucket(bucket),
+            max_uploads,
+            encoding,
+            key_marker,
+            upload_id_marker,
+        )
 
         return self.run(r)
 
-    def get_all_multipart_uploads(self, bucket=None, prefix=''):
+    def get_all_multipart_uploads(self, bucket=None, prefix=""):
         """The non-generator version of list_multipart_uploads."""
         mps = [mp for mp in self.list_multipart_uploads(prefix, bucket)]
         return mps

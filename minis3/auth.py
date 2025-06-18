@@ -1,296 +1,156 @@
 # -*- coding: utf-8 -*-
+"""
+minis3.auth
+~~~~~~~~~~~
+
+Authentication module for S3-compatible services.
+Provides AWS Signature Version 2 and Version 4 support.
+"""
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from requests.auth import AuthBase
-from requests.structures import CaseInsensitiveDict
-from datetime import datetime
-import hashlib
-import hmac
-import base64
-import re
 
-# Python 2/3 support
-try:
-    from urlparse import urlparse
-except ImportError:
-    from urllib.parse import urlparse
-
-from .util import stringify
-
-# A regexp used for detecting aws bucket names
-BUCKET_VHOST_MATCH = re.compile(
-    r'^([a-z0-9\-]+\.)?s3([a-z0-9\-]+)?\.amazonaws\.com$',
-    flags=re.IGNORECASE)
-
-# A list of query params used by aws
-AWS_QUERY_PARAMS = ['versioning', 'location', 'acl', 'torrent', 'lifecycle',
-                    'versionid', 'response-content-type',
-                    'response-content-language', 'response-expires',
-                    'response-cache-control', 'response-content-disposition',
-                    'response-content-encoding', 'delete',
-                    'uploads', 'partnumber', 'uploadid']
+from .datetime_utils import get_utc_datetime
+from .signatures import SignatureV2, SignatureV4
 
 
 class S3Auth(AuthBase):
     """
-    S3 Custom Authenticator class for requests
+    S3 Custom Authenticator class for requests.
 
-    This authenticator will sign your requests based on the RESTAuthentication
-    specs by Amazon
-    http://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html
+    This authenticator will sign your requests using either AWS Signature Version 2
+    or Version 4, making it compatible with AWS S3 and S3-compatible services.
 
-    You can read more about custom authenticators here:
-    http://docs.python-requests.org/en/latest/user/
-    advanced.html#custom-authentication
+    Supports:
+        - AWS Signature Version 4 (default, recommended)
+        - AWS Signature Version 2 (legacy compatibility)
+        - Custom S3-compatible endpoints (MinIO, DigitalOcean Spaces, etc.)
 
-    Usage:
+    Args:
+        access_key (str): Your S3 access key
+        secret_key (str): Your S3 secret key
+        signature_version (str): 's3v4' for Signature Version 4 (default) or 's3' for Version 2
+        endpoint (str): S3 endpoint hostname (default: 's3.amazonaws.com')
 
-    >>> from tinys3.auth import S3Auth
-    >>> requests.put('<S3Url>', data='<S3Data'>, auth=S3Auth('<access_key>',
-                                                             '<secret_key>'))
+    Examples:
+        Basic AWS S3 usage:
+        >>> auth = S3Auth('AKIAIOSFODNN7EXAMPLE', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')
+        >>> response = requests.get('https://bucket.s3.amazonaws.com/key', auth=auth)
+
+        MinIO usage:
+        >>> auth = S3Auth('minioadmin', 'minioadmin', endpoint='localhost:9000')
+        >>> response = requests.get('http://bucket.localhost:9000/key', auth=auth)
+
+        Legacy Signature Version 2:
+        >>> auth = S3Auth('access', 'secret', signature_version='s3')
     """
 
-    def __init__(self, access_key, secret_key):
+    def __init__(
+        self,
+        access_key,
+        secret_key,
+        signature_version="s3v4",
+        endpoint="s3.amazonaws.com",
+    ):
         """
-        Initiate the authenticator, using S3 Credentials
+        Initialize the S3 authenticator.
 
-        Params:
-            - access_key    Your S3 access key
-            - secret_key    You S3 secret key
+        Args:
+            access_key (str): Your S3 access key
+            secret_key (str): Your S3 secret key
+            signature_version (str): 's3v4' for Version 4 (default) or 's3' for Version 2
+            endpoint (str): S3 endpoint hostname
 
+        Raises:
+            ValueError: If an unsupported signature version is specified
         """
-        self.secret_key = secret_key
         self.access_key = access_key
+        self.secret_key = secret_key
+        self.signature_version = signature_version
+        self.endpoint = endpoint
 
-    def sign(self, string_to_sign):
-        """
-        Generates a signature for the given string
-
-        Params:
-            - string_to_sign    The string we want to sign
-
-        Returns:
-            Signature in bytes
-        """
-        string_to_sign = stringify(string_to_sign)
-        # Python 3 fix
-        if type(string_to_sign) != bytes:
-            string_to_sign = string_to_sign.encode('utf8')
-        digest = hmac.new(self.secret_key.encode('utf8'),
-                          msg=string_to_sign,
-                          digestmod=hashlib.sha1).digest()
-        return base64.b64encode(digest).strip().decode('ascii')
-
-    def string_to_sign(self, request):
-        """
-        Generates the string we need to sign on.
-
-        Params:
-            - request   The request object
-
-        Returns
-            String ready to be signed on
-
-        """
-
-        # We'll use case insensitive dict to store the headers
-        h = CaseInsensitiveDict()
-        # Add the hearders
-        h.update(request.headers)
-
-        # If we have an 'x-amz-date' header,
-        # we'll try to use it instead of the date
-        if b'x-amz-date' in h or 'x-amz-date' in h:
-            date = ''
+        # Initialize the appropriate signature implementation
+        if signature_version == "s3v4":
+            self._signer = SignatureV4(access_key, secret_key, endpoint)
+        elif signature_version == "s3":
+            self._signer = SignatureV2(access_key, secret_key, endpoint)
         else:
-            # No x-amz-header, we'll generate a date
-            date = h.get('Date') or self._get_date()
+            raise ValueError(
+                "Unsupported signature version: {0}. Use 's3v4' or 's3'.".format(
+                    signature_version
+                )
+            )
 
-        # Set the date header
-        request.headers['Date'] = date
-
-        # A fix for the content type header extraction in python 3
-        # This have to be done because requests will try to set
-        # application/www-url-encoded header if we pass bytes as the content,
-        # and the content-type is set with a key that is b'Content-Type' and
-        # not 'Content-Type'
-        content_type = ''
-        if b'Content-Type' in request.headers:
-            # Fix content type
-            content_type = h.get(b'Content-Type')
-            del request.headers[b'Content-Type']
-            request.headers['Content-Type'] = content_type
-
-        # The string we're about to generate
-        # There's more information about it here:
-        # http://docs.aws.amazon.com/AmazonS3/latest/dev/
-        # RESTAuthentication.html#ConstructingTheAuthenticationHeader
-        msg = [
-            # HTTP Method
-            request.method,
-            # MD5 If provided
-            h.get(b'Content-MD5', '') or h.get('Content-MD5', ''),
-            # Content type if provided
-            content_type or h.get('Content-Type', ''),
-            # Date
-            date,
-            # Canonicalized special amazon headers and resource uri
-            self._get_canonicalized_amz_headers(h) +
-            self._get_canonicalized_resource(request)
-        ]
-
-        # join with a newline and return
-        return '\n'.join(msg)
-
-    def _get_canonicalized_amz_headers(self, headers):
+    def __call__(self, request):
         """
-        Collect the special Amazon headers, prepare them for signing
+        Sign the request using the configured signature method.
 
-        Params:
-            - headers   CaseInsensitiveDict with the header requests
+        This method is called automatically by the requests library when
+        the auth object is passed to a request.
+
+        Args:
+            request: The PreparedRequest object to sign
 
         Returns:
-            - String with the canonicalized headers
-
-        More information about this process here:
-        http://docs.aws.amazon.com/AmazonS3/latest/dev/
-        RESTAuthentication.html#
-        RESTAuthenticationConstructingCanonicalizedAmzHeaders
+            The signed PreparedRequest object
         """
+        # Ensure we have the required headers for signing
+        self._prepare_request_headers(request)
 
-        # New dict for the amazon headers
-        amz_dict = {}
+        # Use the appropriate signer
+        return self._signer.sign_request(request)
 
-        # Go over the existing headers
-        for k, v in headers.items():
-            # Decode the keys if they are encoded
-            if isinstance(k, bytes):
-                k = k.decode('ascii')
-
-            # to lower case
-            k = k.lower()
-
-            # If it starts with 'x-amz' add it to our dict
-            if k.startswith('x-amz'):
-                amz_dict[k] = v
-
-        result = ""
-        # Sort the keys and iterate through them
-        for k in sorted(amz_dict.keys()):
-            # add stripped key and value to the result string
-            result += "{0}:{1}\n".format(k.strip(),
-                                         amz_dict[k].strip().replace('\n', ' '))
-
-        # Return the result string
-        return result
-
-    def _get_canonicalized_resource(self, request):
+    def _prepare_request_headers(self, request):
         """
-        Generates the canonicalized resource string form a request
+        Prepare request headers for signing.
 
-        You can read more about the process here:
-        http://docs.aws.amazon.com/AmazonS3/latest/dev/
-        RESTAuthentication.html#ConstructingTheCanonicalizedResourceElement
+        Ensures required headers are present and properly formatted.
 
-        Params:
-            - request   The request object
+        Args:
+            request: The request object to prepare
+        """
+        # Ensure we have a date header
+        if "Date" not in request.headers and "x-amz-date" not in request.headers:
+            request.headers["Date"] = get_utc_datetime().strftime(
+                "%a, %d %b %Y %H:%M:%S GMT"
+            )
+
+        # Fix content length for empty body requests
+        if request.method in ["PUT", "POST"] and not hasattr(request, "body"):
+            request.headers["Content-Length"] = "0"
+
+        # Ensure host header is set correctly
+        if "Host" not in request.headers:
+            # Python 2/3 compatibility
+            try:
+                from urlparse import urlparse
+            except ImportError:
+                from urllib.parse import urlparse
+
+            parsed = urlparse(request.url)
+            request.headers["Host"] = parsed.netloc
+
+    @property
+    def region(self):
+        """
+        Get the AWS region for this authenticator.
 
         Returns:
-            String the canoncicalized resource string.
+            str: AWS region name
         """
+        if hasattr(self._signer, "region"):
+            return self._signer.region
+        return "us-east-1"  # Default for Signature V2
 
-        r = ""
-
-        # parse our url
-        parts = urlparse(request.url)
-
-        # get the host, remove any port identifiers
-        host = parts.netloc.split(':')[0]
-
-        if host:
-            # try to match our host to
-            # <hostname>.s3.amazonaws.com/s3.amazonaws.com
-            m = BUCKET_VHOST_MATCH.match(host)
-            if m:
-                bucket = (m.groups()[0] or '').rstrip('.')
-                if bucket:
-                    r += ('/' + bucket)
-            else:
-                # It's a virtual host, add it to the result
-                r += ('/' + host)
-        # Add the path string
-        r += parts.path or '/'
-        # add the special query strings
-        r += self._get_subresource(parts.query)
-
-        return r
-
-    def _get_subresource(self, qs):
-        """
-        Handle subresources in the query string
-
-        More information about subresources:
-        http://docs.aws.amazon.com/AmazonS3/latest/dev/
-        RESTAuthentication.html#ConstructingTheCanonicalizedResourceElement
-        """
-        r = []
-
-        # Split the query string
-        # and order the keys lexicographically
-        keys = sorted(qs.split('&'))
-        # for each item
-        for i in keys:
-            # get the key
-            item = i.split('=')
-            k = item[0].lower()
-            # If it's one the special params
-            if k in AWS_QUERY_PARAMS:
-                # add it to our result list
-                r.append(i)
-        # If we have result, convert them to query string
-        if r:
-            return '?' + '&'.join(r)
-        return ''
-
-    def _get_date(self):
-        """
-        Returns a string for the current date
-        """
-        return datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
-
-    def _fix_content_length(self, request):
-        """
-        Amazon requires to have content-length header when using the put
-        request, however, requests won't add this header, so we need to add it
-        ourselves.
-
-        Params:
-            - request   The request object
-        """
-
-        if request.method == 'PUT' and 'Content-Length' not in request.headers:
-            request.headers['Content-Length'] = '0'
-
-    def __call__(self, r):
-        """
-        The entry point of the custom authenticator.
-
-        When used as an auth class, requests will call this method just before
-        sending the request.
-
-        Params:
-            - r     The request object
-
-        Returns:
-            The request object, after we've updated some headers
-        """
-
-        # Generate the string to sign
-        msg = self.string_to_sign(r)
-        # Sign the string and add the authorization header
-        r.headers['Authorization'] = "AWS {0}:{1}".format(
-            self.access_key, self.sign(msg))
-
-        # Fix an issue with 0 length requests
-        self._fix_content_length(r)
-
-        # return the request
-        return r
+    def __repr__(self):
+        """String representation of the authenticator."""
+        return "<S3Auth access_key={0} signature_version={1} endpoint={2}>".format(
+            (
+                self.access_key[:8] + "..."
+                if len(self.access_key) > 8
+                else self.access_key
+            ),
+            self.signature_version,
+            self.endpoint,
+        )

@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import os
 
 
@@ -5,8 +8,8 @@ def stringify(s):
     """In Py3k, unicode are strings, so we mustn't encode it.
     However it is necessary in Python 2.x, since Unicode strings are
     unicode, not str."""
-    if type(s) != str and type(s) != bytes:
-        s = s.encode('utf-8')
+    if not isinstance(s, (str, bytes)):
+        s = str(s).encode("utf-8")
     return s
 
 
@@ -64,11 +67,11 @@ class LenWrapperStream(object):
         o = self.stream
 
         # If we have a '__len__' method
-        if hasattr(o, '__len__'):
+        if hasattr(o, "__len__"):
             return len(o)
 
         # If we have a len property
-        if hasattr(o, 'len'):
+        if hasattr(o, "len"):
             return o.len
 
         # If we have a fileno property
@@ -81,7 +84,6 @@ class LenWrapperStream(object):
             # fallback to the manual way,
             # this is useful when using something like BytesIO
             pass
-
 
         # calculate based on bytes to end of content
         # get our start position
@@ -100,11 +102,9 @@ class LenWrapperStream(object):
         Make sure equal method works as expected (comparing the underlying
         stream and not the wrapper)
         """
-        if self.stream == other:
-            return True
-
-        if isinstance(other, LenWrapperStream) and other.stream == self.stream:
-            return True
+        if isinstance(other, LenWrapperStream):
+            return self.stream == other.stream
+        return self.stream == other
 
     @property
     def closed(self):
