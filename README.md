@@ -1,10 +1,12 @@
 # minis3 - Enhanced S3-Compatible Storage Library for Python
 
-[![PyPI version](https://badge.fury.io/py/minis3.svg)](https://badge.fury.io/py/minis3)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/thegu/minis3/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/minis3.svg)](https://badge.fury.io/py/minis3)
 [![Python Versions](https://img.shields.io/pypi/pyversions/minis3.svg)](https://pypi.org/project/minis3/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-**minis3** is a modern, maintained fork of the popular `tinys3` library. It provides a simple, Pythonic interface for interacting with Amazon S3 and S3-compatible storage services like MinIO, with enhanced features and better Python 2/3 compatibility.
+
+`minis3` is a modern, maintained fork of the popular `tinys3` library. It provides a simple, Pythonic interface for interacting with Amazon S3 and S3-compatible storage services like MinIO, with enhanced features and better Python 2/3 compatibility.
 
 ## Key Features
 
