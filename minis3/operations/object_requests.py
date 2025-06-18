@@ -168,6 +168,10 @@ class UploadRequest(S3Request):
         """
         expires = self.expires
 
+        # Return None if expires is not set
+        if expires is None:
+            return None
+
         # Handle special 'max' value
         if expires == "max":
             expires = datetime.timedelta(seconds=31536000)  # 1 year

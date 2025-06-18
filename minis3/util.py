@@ -106,6 +106,13 @@ class LenWrapperStream(object):
             return self.stream == other.stream
         return self.stream == other
 
+    def __ne__(self, other):
+        """
+        Make sure not equal method works as expected (comparing the underlying
+        stream and not the wrapper)
+        """
+        return not self.__eq__(other)
+
     @property
     def closed(self):
         """
